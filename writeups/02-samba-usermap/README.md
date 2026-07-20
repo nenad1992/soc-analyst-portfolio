@@ -1,4 +1,3 @@
-markdown
 # Samba 3.0.20 — usermap_script RCE (CVE-2007-2447)
 
 Za razliku od vsftpd backdoor-a, ovde nije u pitanju trovanje izvornog koda
