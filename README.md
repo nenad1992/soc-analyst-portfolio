@@ -14,6 +14,7 @@ remedijaciju, sa MITRE ATT&CK mapiranjem.
 | 01 | [vsftpd 2.3.4 Backdoor](writeups/01-vsftpd-backdoor) | CVE-2011-2523 | Ručno + Metasploit | T1190, T1059 |
 | 02 | [Samba usermap_script RCE](writeups/02-samba-usermap) | CVE-2007-2447 | Ručno + Metasploit | T1190, T1059, T1021.002 |
 | 03 | [UnrealIRCd Backdoor](writeups/03-unrealircd-backdoor) | CVE-2010-2075 | Ručno + Metasploit | T1190, T1059 |
+| 04 | [distcc RCE](writeups/04-distccd-rce) | CVE-2004-2687 | Metasploit | T1190, T1059 |
 
 ## Alati korišćeni u lab-u
 - Kali Linux (attacker)
