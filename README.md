@@ -16,6 +16,12 @@ remedijaciju, sa MITRE ATT&CK mapiranjem.
 | 03 | [UnrealIRCd Backdoor](writeups/03-unrealircd-backdoor) | CVE-2010-2075 | Ručno + Metasploit | T1190, T1059 |
 | 04 | [distcc RCE](writeups/04-distccd-rce) | CVE-2004-2687 | Metasploit | T1190, T1059 |
 
+## Detection Engineering
+
+Suricata IDS pravila testirana protiv svakog exploita iz tabele iznad,
+uključujući dijagnostikovanje i rešavanje false positive problema.
+Detalji: [detection-engineering/](detection-engineering)
+
 ## Alati korišćeni u lab-u
 - Kali Linux (attacker)
 - Metasploitable2 (target)
