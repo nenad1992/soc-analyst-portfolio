@@ -6,6 +6,10 @@ Svaki writeup pokriva ceo tok — od enumeracije, preko eksploatacije (ručne
 i/ili preko Metasploit-a), do detekcije sa blue team ugla i predloga za
 remedijaciju, sa MITRE ATT&CK mapiranjem.
 
+## Topologija
+
+![Network topology](assets/network_topology.svg)
+
 ## Writeup-ovi
 
 | # | Naziv | CVE | Metod | MITRE ATT&CK |

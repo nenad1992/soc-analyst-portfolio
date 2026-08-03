@@ -1,0 +1,66 @@
+<svg viewBox="0 0 900 560" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#555"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="900" height="560" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="450" y="35" font-size="20" font-weight="bold" text-anchor="middle" fill="#1a1a1a">Home Lab — Network Topology</text>
+  <text x="450" y="58" font-size="13" text-anchor="middle" fill="#666">VirtualBox Host-Only Network — 192.168.56.0/24</text>
+
+  <!-- Host machine outer box -->
+  <rect x="40" y="85" width="820" height="440" rx="10" fill="none" stroke="#999" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <text x="60" y="110" font-size="13" fill="#888">Windows Host — VirtualBox</text>
+
+  <!-- Kali box -->
+  <rect x="90" y="140" width="220" height="140" rx="8" fill="#1f2937" />
+  <text x="200" y="172" font-size="16" font-weight="bold" text-anchor="middle" fill="#ffffff">Kali Linux</text>
+  <text x="200" y="196" font-size="13" text-anchor="middle" fill="#d1d5db">Attacker</text>
+  <text x="200" y="222" font-size="13" text-anchor="middle" fill="#9ca3af">192.168.56.101</text>
+  <text x="200" y="246" font-size="12" text-anchor="middle" fill="#9ca3af">Nmap, Metasploit,</text>
+  <text x="200" y="262" font-size="12" text-anchor="middle" fill="#9ca3af">smbclient, netcat</text>
+
+  <!-- Metasploitable box -->
+  <rect x="340" y="140" width="220" height="140" rx="8" fill="#7f1d1d"/>
+  <text x="450" y="172" font-size="16" font-weight="bold" text-anchor="middle" fill="#ffffff">Metasploitable2</text>
+  <text x="450" y="196" font-size="13" text-anchor="middle" fill="#fecaca">Target</text>
+  <text x="450" y="222" font-size="13" text-anchor="middle" fill="#fca5a5">192.168.56.102</text>
+  <text x="450" y="246" font-size="12" text-anchor="middle" fill="#fca5a5">vsftpd, Samba,</text>
+  <text x="450" y="262" font-size="12" text-anchor="middle" fill="#fca5a5">UnrealIRCd, distccd</text>
+
+  <!-- Suricata sensor box -->
+  <rect x="590" y="140" width="220" height="140" rx="8" fill="#14532d"/>
+  <text x="700" y="172" font-size="16" font-weight="bold" text-anchor="middle" fill="#ffffff">Suricata Sensor</text>
+  <text x="700" y="196" font-size="13" text-anchor="middle" fill="#bbf7d0">Debian 13, passive</text>
+  <text x="700" y="222" font-size="13" text-anchor="middle" fill="#86efac">192.168.56.104</text>
+  <text x="700" y="246" font-size="12" text-anchor="middle" fill="#86efac">Promiscuous mode</text>
+  <text x="700" y="262" font-size="12" text-anchor="middle" fill="#86efac">IDS rules + alerting</text>
+
+  <!-- Host-only network bus -->
+  <line x1="90" y1="330" x2="810" y2="330" stroke="#374151" stroke-width="3"/>
+  <text x="450" y="318" font-size="12" text-anchor="middle" fill="#374151" font-style="italic">Host-Only Adapter (vboxnet0) — shared network segment</text>
+
+  <!-- connectors from boxes to bus -->
+  <line x1="200" y1="280" x2="200" y2="330" stroke="#374151" stroke-width="2"/>
+  <line x1="450" y1="280" x2="450" y2="330" stroke="#374151" stroke-width="2"/>
+  <line x1="700" y1="280" x2="700" y2="330" stroke="#374151" stroke-width="2"/>
+
+  <!-- Attack traffic arrow -->
+  <line x1="230" y1="365" x2="420" y2="365" stroke="#b91c1c" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="325" y="358" font-size="12" text-anchor="middle" fill="#b91c1c">exploit traffic</text>
+
+  <!-- Monitoring arrows (dotted, sensor observes both) -->
+  <line x1="670" y1="365" x2="480" y2="365" stroke="#15803d" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+  <line x1="670" y1="380" x2="230" y2="380" stroke="#15803d" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+  <text x="700" y="400" font-size="12" text-anchor="middle" fill="#15803d">passively observes</text>
+  <text x="700" y="416" font-size="12" text-anchor="middle" fill="#15803d">all traffic on segment</text>
+
+  <!-- Detection pipeline box -->
+  <rect x="90" y="450" width="720" height="60" rx="8" fill="#f3f4f6" stroke="#d1d5db"/>
+  <text x="450" y="475" font-size="13" font-weight="bold" text-anchor="middle" fill="#1f2937">Detection pipeline</text>
+  <text x="450" y="495" font-size="12" text-anchor="middle" fill="#4b5563">Suricata rule match → fast.log alert → (planned) SIEM ingestion (Wazuh / ELK)</text>
+
+</svg>
