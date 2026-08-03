@@ -1,0 +1,7 @@
+alert tcp any any -> any 6200 (msg:"VSFTPD 2.3.4 Backdoor Shell Connection"; flow: established; sid:1000001; rev:1;)
+
+alert tcp any any -> any [139,445] (msg:"Samba usermap_script Reverse Shell Connection"; content:"|6E 00 6F 00 68 00 75 00 70 00|"; sid: 1000002; rev:4;)
+
+alert tcp any any -> any 6667 (msg:"UnrealIRCd Backdoor Command Attempt"; content:"AB"; sid:1000003; rev:1;)
+
+alert tcp any any -> any 3632 (msg:"Distcc RCE Attempt"; flow:established; sid:1000004; rev:1;)
