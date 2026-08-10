@@ -10,6 +10,13 @@ remedijaciju, sa MITRE ATT&CK mapiranjem.
 
 ![Network topology](assets/network_topology.svg)
 
+## Infrastructure & SIEM Setup
+
+Manuelna instalacija Wazuh SIEM stack-a (indexer, manager, dashboard) na
+Ubuntu Server, uključujući TLS sertifikate, Filebeat integraciju i
+troubleshooting realnih problema (DNS, disk, servisi). Detalji:
+[infrastructure/wazuh-siem-setup/](infrastructure/wazuh-siem-setup)
+
 ## Writeup-ovi
 
 | # | Naziv | CVE | Metod | MITRE ATT&CK |
