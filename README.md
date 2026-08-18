@@ -6,6 +6,31 @@ Svaki writeup pokriva ceo tok — od enumeracije, preko eksploatacije (ručne
 i/ili preko Metasploit-a), do detekcije sa blue team ugla i predloga za
 remedijaciju, sa MITRE ATT&CK mapiranjem.
 
+## Kako ovo funkcioniše zajedno
+
+Ovaj portfolio nije skup odvojenih vežbi — svaki deo se nadovezuje na prethodni
+i zajedno čine kompletan security operations ciklus:
+
+Prvo sam sagradio **monitoring infrastrukturu**: kompletan Wazuh SIEM stack
+instaliran ručno (paket po paket, bez automated skripte), što je otkrilo sve
+zavisnosti koje automated instalacija sakriva — TLS sertifikati, Filebeat kao
+poseban log shipper, tačna imena konfiguracionih fajlova po komponenti. Realni
+troubleshooting kroz DNS hijacking, disk probleme i systemd timeout-ove dokumentovan
+je kao deo procesa, ne sakriven.
+
+Zatim sam pisao **custom Suricata IDS pravila** za svaki exploit i integrisao ih sa
+Wazuh-om kroz custom decoder/rules pristup (ne gotov modul), sa eksplicitnim MITRE
+ATT&CK mapiranjem vidljivim u Threat Hunting dashboard-u. Svako pravilo testirano je
+kroz stvaran exploit saobraćaj sa Kali VM-a ka Metasploitable2 meti.
+
+Na kraju sam zatvorio petlju sa **Active Response**: kada Suricata uhvati exploit
+pokušaj i Wazuh generiše alarm, sistem automatski blokira napadačev IP na nivou
+firewall-a i automatski ga deblokira nakon definisanog timeout-a.
+
+Rezultat: napad koji pokrenem sa Kali-ja → Suricata ga hvata na mreži → Wazuh
+generiše alarm sa MITRE tagom → sistem automatski reaguje. Celi lanac, s kraja
+na kraj.
+
 ## Topologija
 
 ![Network topology](assets/network_topology.svg)
