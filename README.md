@@ -14,8 +14,16 @@ remedijaciju, sa MITRE ATT&CK mapiranjem.
 
 Manuelna instalacija Wazuh SIEM stack-a (indexer, manager, dashboard) na
 Ubuntu Server, uključujući TLS sertifikate, Filebeat integraciju i
-troubleshooting realnih problema (DNS, disk, servisi). Detalji:
-[infrastructure/wazuh-siem-setup/](infrastructure/wazuh-siem-setup)
+troubleshooting realnih problema (DNS, disk, servisi):
+[infrastructure/wazuh-siem-setup/README.md](infrastructure/wazuh-siem-setup/README.md)
+
+Suricata IDS integrisan sa Wazuh-om preko custom decoder/rules pristupa,
+sa MITRE ATT&CK mapiranjem vidljivim u Threat Hunting dashboard-u:
+[infrastructure/wazuh-siem-setup/suricata-decoder-integration.md](infrastructure/wazuh-siem-setup/suricata-decoder-integration.md)
+
+Wazuh Active Response — automatska iptables blokada napadačevog IP-a
+kada custom Suricata pravilo okine alarm, sa auto-unblock nakon timeout-a:
+[infrastructure/wazuh-siem-setup/active-response.md](infrastructure/wazuh-siem-setup/active-response.md)
 
 ## Writeup-ovi
 
@@ -37,7 +45,9 @@ Detalji: [detection-engineering/](detection-engineering)
 - Kali Linux (attacker)
 - Metasploitable2 (target)
 - Nmap, Metasploit Framework, smbclient, netcat
-- VirtualBox (host-only mreža)
+- Suricata IDS (custom pravila, MITRE ATT&CK mapiranje)
+- Wazuh SIEM (indexer, manager, dashboard, Filebeat)
+- VirtualBox (host-only mreža `192.168.56.0/24`)
 
 ## O meni
 
@@ -45,4 +55,5 @@ Prelazim iz data engineering-a u cybersecurity, sa fokusom na SOC Analyst
 (L1/L2) pozicije. Background u fizičkoj hemiji i spektroskopiji (Univerzitet
 u Beogradu), trenutno radim kao Data Integration Engineer u ZF Group. Ovaj
 lab dokumentuje moj praktičan rad na razumevanju napada iz oba ugla —
-ofanzivnog i defanzivnog — kao pripremu za SOC ulogu.
+ofanzivnog i defanzivnog — kao pripremu za SOC ulogu. Posedujem CompTIA
+Security+ sertifikat.
