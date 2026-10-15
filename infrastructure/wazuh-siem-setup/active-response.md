@@ -1,47 +1,47 @@
-# Wazuh Active Response: automatska blokada napadača
+# Wazuh Active Response: blocking the attacker automatically
 
-Nastavak na [Suricata → Wazuh integraciju](suricata-decoder-integration.md). Ovaj deo
-pokriva konfiguraciju **Active Response** modula koji automatski blokira IP adresu
-napadača kada jedno od custom Suricata pravila okine alarm.
+Follows on from [the Suricata → Wazuh integration](suricata-decoder-integration.md).
+Here I set up the **Active Response** module so Wazuh automatically blocks the
+attacker's IP whenever one of my custom Suricata rules fires.
 
-## Cilj
+## Goal
 
-Zatvoriti petlju detekcije: umesto da samo **vidimo** napad u dashboard-u, sistem
-automatski **reaguje** — blokira napadačev IP na nivou firewall-a (iptables) čim
-Wazuh generiše alarm. Nakon definisanog timeout-a, blokada se automatski ukida.
+Close the loop. Instead of just *seeing* the attack in the dashboard, I wanted the
+system to *act* on it — drop the attacker's IP at the firewall (iptables) the
+moment Wazuh raises the alert, then lift the block automatically after a timeout.
 
 ```
 Suricata alert (eve.json)
         ↓
 Wazuh logcollector → custom rule 100100-100103 (level 10, MITRE tag)
         ↓
-Wazuh execd poziva suricata-firewall-drop.sh
+Wazuh execd calls suricata-firewall-drop.sh
         ↓
 iptables -I INPUT -s <src_ip> -j DROP
         ↓
-Auto-unblock nakon 300 sekundi
+Auto-unblock after 300 seconds
 ```
 
-## Zašto custom skripta umesto ugrađenog `firewall-drop`
+## Why a custom script and not the built-in `firewall-drop`
 
-Wazuh dolazi sa ugrađenom `firewall-drop` binarnom skriptom (kompajliran Go executable)
-koja radi iptables blokadu. Problem: skripta traži polje koje se zove `srcip` u
-dekodiranim podacima alarma, ali Wazuh-ov generički JSON decoder Suricata evente
-dekodira sa poljem `src_ip` (sa donjom crticom).
+Wazuh ships a built-in `firewall-drop` script (a compiled Go binary) that does
+the iptables block. The snag: it expects a field called `srcip` in the alert's
+decoded data, but Wazuh's generic JSON decoder decodes Suricata events with
+`src_ip` (underscore).
 
-Rezultat: skripta se poziva, ali ne može da pronađe IP i ispisuje:
+So the script gets called, can't find the IP, and prints:
 ```
 Cannot read 'srcip' from data or invalid IP format
 ```
 
-Rešenje je custom shell skripta koja sama parsira kompletan JSON alarm koji Wazuh
-šalje via stdin, bez oslanjanja na ugrađene `srcip` konvencije.
+The way around it is a custom shell script that parses the full JSON alert Wazuh
+hands it on stdin, instead of relying on the built-in `srcip` convention.
 
-## Konfiguracija
+## Configuration
 
-### 1. `ossec.conf` — dodavanje command i active-response bloka
+### 1. `ossec.conf` — add the command and active-response blocks
 
-U `/var/ossec/etc/ossec.conf`, unutar `<ossec_config>` taga:
+In `/var/ossec/etc/ossec.conf`, inside `<ossec_config>`:
 
 ```xml
 <command>
@@ -59,12 +59,12 @@ U `/var/ossec/etc/ossec.conf`, unutar `<ossec_config>` taga:
 </active-response>
 ```
 
-Parametri:
-- `<location>local</location>` — izvršava se na istoj mašini koja je generisala alarm (wazuh-server, agent 000)
-- `<rules_id>` — sva četiri custom Suricata pravila
-- `<timeout>300</timeout>` — auto-unblock nakon 5 minuta
+The parameters:
+- `<location>local</location>` — run it on the same machine that raised the alert (wazuh-server, agent 000)
+- `<rules_id>` — all four custom Suricata rules
+- `<timeout>300</timeout>` — auto-unblock after 5 minutes
 
-### 2. Custom Active Response skripta
+### 2. The custom Active Response script
 
 `/var/ossec/active-response/bin/suricata-firewall-drop.sh`:
 
@@ -95,16 +95,16 @@ fi
 exit 0
 ```
 
-Permisije:
+Permissions:
 ```bash
 sudo chmod 750 /var/ossec/active-response/bin/suricata-firewall-drop.sh
 sudo chown root:wazuh /var/ossec/active-response/bin/suricata-firewall-drop.sh
 ```
 
-### 3. Zašto Python3, a ne shell regex
+### 3. Why Python3 and not shell regex
 
-U Wazuh 4.x, Active Response skripta prima kompletan JSON alarm kao `stdin`, ne
-kao argumente komandne linije. JSON struktura je duboko ugnježdena:
+In Wazuh 4.x the Active Response script gets the whole JSON alert on `stdin`, not
+as command-line arguments. And the structure is deeply nested:
 
 ```json
 {
@@ -120,19 +120,18 @@ kao argumente komandne linije. JSON struktura je duboko ugnježdena:
 }
 ```
 
-Pokušaji sa shell regex-om (`grep -oP` Perl regex, `grep -o` POSIX regex) nisu
-pouzdano radili zbog kombinacije escaped karaktera u JSON-u i nedostupnosti Perl
-regex modula na Ubuntu Server-u. Python3 `json.load()` je jedinstven pouzdan pristup
-koji:
-- Ne zavisi o regex dijalektu
-- Ispravno parsira escaped karaktere u JSON-u
-- Dostupan je po defaultu na Ubuntu 22.04
+I tried shell regex first (`grep -oP` Perl regex, `grep -o` POSIX) and couldn't
+get it reliable, partly because of the escaped characters in the JSON and partly
+because the Perl regex module isn't there on Ubuntu Server. Python3 `json.load()`
+was the one approach that just worked. It doesn't care about regex dialects, it
+handles the escaped characters properly, and it's already on Ubuntu 22.04 by
+default.
 
-## Verifikacija
+## Verification
 
-### Ručni test (direktan poziv skripte)
+### Manual test (calling the script directly)
 
-Provera da skripta ispravno parsira Wazuh JSON format i blokira IP:
+Checking that the script parses Wazuh's JSON format and blocks the IP:
 
 ```bash
 cat << 'EOF' | sudo /var/ossec/active-response/bin/suricata-firewall-drop.sh
@@ -140,7 +139,7 @@ cat << 'EOF' | sudo /var/ossec/active-response/bin/suricata-firewall-drop.sh
 EOF
 ```
 
-Potvrda u iptables i logu:
+Confirmed in iptables and the log:
 ```bash
 sudo iptables -L INPUT -n | grep 192.168.56.101
 # DROP all -- 192.168.56.101 0.0.0.0/0
@@ -150,58 +149,57 @@ sudo tail -5 /var/ossec/logs/active-responses.log
 # Tue Aug 18 07:27:40 AM UTC 2026 suricata-firewall-drop: Blocked 192.168.56.101
 ```
 
-### Provera auto-unblock
+### Checking the auto-unblock
 
-Nakon 300 sekundi, Wazuh automatski šalje `delete` komandu istoj skripti, koja
-uklanja iptables pravilo:
+After 300 seconds Wazuh sends a `delete` to the same script, which pulls the
+iptables rule:
 ```bash
 sudo iptables -L INPUT -n | grep 192.168.56.101
-# (prazan output — pravilo uklonjeno)
+# (empty output — rule gone)
 ```
 
-## Ključni problemi i rešenja
+## Problems I hit along the way
 
 ### Problem 1: `Cannot read 'srcip' from data`
-Ugrađena `firewall-drop` binarna skripta traži `srcip` polje, ali Wazuh iz Suricata
-JSON-a dekodira polje kao `src_ip`. Rešenje: custom skripta koja sama parsira JSON.
+The built-in `firewall-drop` binary wants `srcip`, but Wazuh decodes the Suricata
+field as `src_ip`. Solved by writing my own script that parses the JSON itself.
 
-### Problem 2: Custom decoder lomi JSON auto-decoding
-Pokušaj dodavanja custom decoder-a koji bi mapirao `src_ip` → `srcip` uzrokovao je
-da Wazuh izgubi sva ostala decodirana polja (Phase 2 pokazivao samo `name: 'json'`
-bez ikakvih ekstrahovanih vrednosti). Rešenje: eliminisati potrebu za custom
-decoder-om kroz Python3 parser u samoj AR skripti.
+### Problem 2: a custom decoder broke JSON auto-decoding
+My first instinct was to add a custom decoder that mapped `src_ip` → `srcip`. That
+backfired: Wazuh then lost all the other decoded fields (Phase 2 showed only
+`name: 'json'` with nothing extracted). So I dropped the decoder idea entirely and
+handled it in the AR script with the Python3 parser instead.
 
-### Problem 3: Shell regex nije pouzdan za JSON
-`grep -oP` (Perl regex) nije dostupan po defaultu na Ubuntu Server 22.04.
-`grep -o` (POSIX) je radio za jednostavne slučajeve, ali nije pouzdan za
-kompleksne escaped JSON stringove. Rešenje: Python3 `json.load()`.
+### Problem 3: shell regex isn't reliable for JSON
+`grep -oP` (Perl regex) isn't on Ubuntu Server 22.04 by default. `grep -o` (POSIX)
+was fine for simple cases but not for the messier escaped JSON strings. Python3
+`json.load()` was the fix.
 
-## Arhitekturalne napomene za portfolio
+## Architecture notes for the portfolio
 
-**Opseg blokade u lab okruženju:** Active Response se izvršava na `wazuh-server`
-mašini (agent 000, `location: local`). Ovo znači da blokada važi na nivou
-wazuh-server firewall-a — Kali VM ne može komunicirati sa wazuh-server-om dok je
-blokada aktivna (SSH, dashboard, itd.). U produkcijskom okruženju, AR bi se
-izvršavao na agentima koji štite stvarne ciljeve napada, ne na samom SIEM serveru.
+**Where the block lands in this lab:** Active Response runs on the `wazuh-server`
+machine (agent 000, `location: local`). So the block sits at the wazuh-server
+firewall — while it's active, the Kali VM can't reach wazuh-server at all (SSH,
+dashboard, etc.). In production you'd run AR on the agents protecting the actual
+targets, not on the SIEM server itself.
 
-**Metasploitable2 nema Wazuh agenta:** pošto Metasploitable2 koristi Ubuntu 8.04
-(kernel 2.6.x, 32-bit), moderni Wazuh agent (koji zahteva minimum Ubuntu 14+)
-nije moguće instalirati. Zbog toga AR ne može direktno blokirati saobraćaj ka
-Metasploitable2 — to bi zahtevalo ili moderniji target sistem sa agentom, ili
-network-level blokadu (npr. na ruterskom nivou).
+**Metasploitable2 can't take a Wazuh agent:** it's Ubuntu 8.04 (kernel 2.6.x,
+32-bit), and the modern Wazuh agent needs at least Ubuntu 14. So AR can't block
+traffic directly on Metasploitable2. That would take either a newer target with an
+agent, or blocking at the network level (the router, say).
 
-**Automatski trigger u lab okruženju:** ručni test potvrđuje da skripta ispravno
-parsira Wazuh JSON format i blokira IP. Automatski trigger kroz stvaran mrežni
-saobraćaj zahteva kontinuiran saobraćaj koji Suricata može uhvatiti na `enp0s8`
-interfejsu — što je ograničenje specifično za ovaj lab setup (portovi se zatvaraju
-između testova, Metasploit ima payload probleme sa starim servisima), ne greška
-u konfiguraciji AR modula.
+**On the automatic trigger:** the manual test proves the script parses Wazuh's
+JSON and blocks the IP correctly. Getting it to fire automatically off live
+traffic needs a steady stream for Suricata to catch on `enp0s8`, and that's a
+limit of this particular lab setup (ports close between tests, Metasploit has
+payload trouble with these old services) rather than anything wrong with the AR
+config.
 
-## Sledeći koraci
+## Next steps
 
-- Instalacija Wazuh agenta na moderniji Linux target (npr. Ubuntu 22.04 VM) za
-  host-based detekciju i direktnu AR blokadu na meti napada
-- Custom dashboard vizualizacija za `exploit_attempt` grupu alarma sa prikazom
-  blokiranih IP adresa
-- Proširenje AR na više pravila (npr. SSH brute-force pravila iz ugrađenog
-  Wazuh rulseta)
+- Put a Wazuh agent on a more modern Linux target (an Ubuntu 22.04 VM, say) for
+  host-based detection and direct AR blocking right on the target.
+- A custom dashboard view for the `exploit_attempt` group that also shows which
+  IPs are currently blocked.
+- Extend AR to more rules, like the SSH brute-force rules from the built-in Wazuh
+  ruleset.

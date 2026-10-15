@@ -1,44 +1,44 @@
-# Suricata → Wazuh integracija: custom decoder i rules
+# Suricata → Wazuh integration: custom decoder and rules
 
-Nastavak na [Wazuh SIEM stack — manuelna instalacija](README.md). Ovaj deo pokriva
-povezivanje Suricata NIDS-a sa Wazuh manager-om preko **custom decoder/rules
-pristupa**, umesto gotovog Filebeat Suricata modula ili generičkog Wazuh
-JSON auto-decode-a bez klasifikacije.
+Follows on from [the manual Wazuh install](README.md). Here I wire the Suricata
+NIDS into the Wazuh manager using a **custom decoder/rules approach**, rather than
+the stock Filebeat Suricata module or Wazuh's generic JSON auto-decode with no
+classification.
 
-## Zašto custom rules, a ne gotov modul
+## Why custom rules instead of a ready-made module
 
-Wazuh nudi generičku JSON integraciju (`<localfile><log_format>json</log_format>`)
-koja automatski dekodira `eve.json` i prepoznaje ga kao `suricata` grupu preko
-ugrađenog pravila `86601`. Ovo radi "od kutije", ali ima ozbiljno ograničenje
-za portfolio svrhe: svaki alert — bez obzira na signature — dobija identičan,
-generički opis (*"Suricata: Alert - [signature text]"*), fiksni level 3, i
-**nema MITRE ATT&CK mapiranje**.
+Wazuh has a generic JSON integration
+(`<localfile><log_format>json</log_format>`) that auto-decodes `eve.json` and tags
+it as the `suricata` group via the built-in rule `86601`. It works out of the box,
+but for a portfolio it falls short in one big way: every alert, no matter the
+signature, gets the same generic description (*"Suricata: Alert - [signature
+text]"*), a fixed level 3, and **no MITRE ATT&CK mapping at all**.
 
-Cilj ovog dela je da svaki od četiri custom Suricata potpisa (već testirana
-u ranijim [exploit writeup-ovima](../../writeups)) dobije:
-- Specifičan, čitljiv opis
-- Odgovarajući severity level
-- MITRE ATT&CK tehnike i taktike, vidljive u Threat Hunting dashboard-u
+What I wanted was for each of my four Suricata signatures (already tested in the
+[exploit writeups](../../writeups)) to come through with:
+- a specific, readable description
+- a sensible severity level
+- MITRE ATT&CK techniques and tactics, showing up in the Threat Hunting dashboard
 
-## Arhitektura
+## Architecture
 
 ```
 Suricata (eve.json, custom.rules)
         │  localfile (log_format: json)
         ▼
 Wazuh Manager
-        │  generički JSON decoder → default rule 86601 (level 3, "suricata")
-        │  local_rules.xml → specifična pravila po signature_id (level 10, MITRE)
+        │  generic JSON decoder → default rule 86601 (level 3, "suricata")
+        │  local_rules.xml → specific rules per signature_id (level 10, MITRE)
         ▼
 Filebeat → Wazuh Indexer → Wazuh Dashboard (Threat Hunting)
 ```
 
-## Konfiguracija
+## Configuration
 
-### 1. Povezivanje manager-a sa `eve.json`
+### 1. Point the manager at `eve.json`
 
-Suricata radi na istoj mašini kao manager (all-in-one lab), pa se log čita
-direktno preko `localfile` stanze u `/var/ossec/etc/ossec.conf`:
+Suricata runs on the same box as the manager (all-in-one lab), so I read the log
+directly with a `localfile` stanza in `/var/ossec/etc/ossec.conf`:
 
 ```xml
 <localfile>
@@ -47,11 +47,11 @@ direktno preko `localfile` stanze u `/var/ossec/etc/ossec.conf`:
 </localfile>
 ```
 
-### 2. Custom decoder polja (referenca)
+### 2. Decoder fields (for reference)
 
-Wazuh-ov generički JSON decoder već spljošti ugnježdene Suricata objekte u
-dostupna polja bez potrebe za ručnim decoder XML-om — potvrđeno preko
-`wazuh-logtest`:
+Wazuh's generic JSON decoder already flattens the nested Suricata objects into
+usable fields, so I didn't have to write any decoder XML. `wazuh-logtest`
+confirmed the fields were there:
 
 ```
 alert.signature_id: '1000001'
@@ -61,14 +61,14 @@ dest_port: '6200'
 src_ip: '192.168.56.101'
 ```
 
-Na osnovu ovih polja pišu se custom rules (korak 3) — nije bio potreban
-poseban `decoder.xml`, samo referenciranje postojećih dinamičkih polja u
-`<field>` tagovima pravila.
+I wrote the custom rules (step 3) against these fields. No separate `decoder.xml`
+was needed, just referencing the existing dynamic fields in the rules' `<field>`
+tags.
 
 ### 3. Custom rules (`/var/ossec/etc/rules/local_rules.xml`)
 
-Jedno pravilo po `signature_id`, svako sa `if_sid` na default Suricata
-pravilo `86601` i eksplicitnim MITRE mapiranjem:
+One rule per `signature_id`, each hanging off the default Suricata rule `86601`
+via `if_sid`, with MITRE mapping spelled out:
 
 ```xml
 <group name="suricata,">
@@ -121,49 +121,47 @@ pravilo `86601` i eksplicitnim MITRE mapiranjem:
 </group>
 ```
 
-MITRE tehnike su usklađene sa mapiranjima iz postojećih exploit writeup-ova
-(vsftpd/UnrealIRCd/distcc → T1190, T1059; Samba → dodatno T1021.002 zbog
-lateral movement preko SMB-a).
+The MITRE techniques line up with the mappings from the exploit writeups
+(vsftpd/UnrealIRCd/distcc → T1190, T1059; Samba also gets T1021.002 for the
+lateral movement over SMB).
 
-## Ključni problem i rešenje: "Too many fields for JSON decoder"
+## The problem that cost me time: "Too many fields for JSON decoder"
 
-Nakon dodavanja `localfile` stanze, `ossec.log` je počeo beležiti kontinuirane
-greške:
+Right after I added the `localfile` stanza, `ossec.log` started spewing the same
+error over and over:
 
 ```
 wazuh-analysisd: ERROR: Too many fields for JSON decoder.
 ```
 
-**Uzrok:** Wazuh-ov generički JSON decoder ima podrazumevani limit broja
-polja po eventu (`analysisd.decoder_order_size`, default 256). Suricata
-`eve.json` eventi drugih tipova (`flow`, `http`, `tls`, `stats`) imaju znatno
-više ugnježdenih polja od `alert` eventa i lako premašuju taj limit kad se
-spljošte.
+Turned out Wazuh's generic JSON decoder caps the number of fields per event
+(`analysisd.decoder_order_size`, default 256). Suricata's other event types
+(`flow`, `http`, `tls`, `stats`) carry way more nested fields than an `alert`
+event, and once flattened they blow right past that cap.
 
-**Rešenje:** povećanje limita na maksimum preko `local_internal_options.conf`
-(ne menjati glavni `internal_options.conf` — briše se pri update-u):
+I raised the limit to the max through `local_internal_options.conf` (not the main
+`internal_options.conf`, which gets wiped on update):
 
 ```bash
 echo "analysisd.decoder_order_size=1024" | sudo tee -a /var/ossec/etc/local_internal_options.conf
 sudo systemctl restart wazuh-manager
 ```
 
-Napomena: nekoliko izvora u zajednici navodi da ni maksimalna vrednost
-(1024) ne rešava problem u svim slučajevima kod vrlo opširnih `http`/`tls`
-eventa. Alternativa koja nije bila potrebna u ovom slučaju, ali vrijedi
-zabeležiti za buduće skaliranje: filtrirati Suricata `eve.json` izlaz da
-piše samo `event_type: alert` evente, umesto svih tipova.
+Worth flagging for later: a few people in the community say even 1024 isn't enough
+for really verbose `http`/`tls` events. I didn't need it here, but the other fix
+is to filter Suricata's `eve.json` down to just `event_type: alert` instead of
+emitting every type.
 
-## Testiranje preko `wazuh-logtest`
+## Testing with `wazuh-logtest`
 
-Pre primene u produkciji, svako pravilo testirano je izolovano lepljenjem
-stvarnog `eve.json` alert reda u `wazuh-logtest`:
+Before putting anything live, I tested each rule in isolation by pasting a real
+`eve.json` alert line into `wazuh-logtest`:
 
 ```bash
 sudo /var/ossec/bin/wazuh-logtest
 ```
 
-Primer potvrđenog rezultata za VSFTPD:
+What a confirmed VSFTPD result looked like:
 
 ```
 **Phase 3: Completed filtering (rules).
@@ -176,46 +174,41 @@ Primer potvrđenog rezultata za VSFTPD:
         mitre.technique: '['Exploit Public-Facing Application', 'Command and Scripting Interpreter']'
 ```
 
-Sva četiri pravila potvrđena su na isti način pre restarta manager-a u
-produkciji.
+I confirmed all four the same way before restarting the manager for real.
 
-## Verifikacija end-to-end
+## End-to-end verification
 
-Nakon ponovnog izvođenja sva četiri exploita sa Kali VM-a (vsftpd, Samba,
-UnrealIRCd, distcc), alarmi klasifikovani custom pravilima potvrđeni su na
-tri nivoa:
+After re-running all four exploits from Kali (vsftpd, Samba, UnrealIRCd, distcc),
+I checked the custom-classified alerts at three levels:
 
-1. **`alerts.log` na manageru** — svaki event ispravno mapiran na svoje
-   pravilo (`100100`–`100103`), ne generičko `86601`.
-2. **Wazuh Indexer direktno** (`curl` upit na port 9200) — potvrđeno da su
-   svi alarmi (npr. 10 zapisa za `rule.id:100103`) stigli preko Filebeat-a,
-   sa ispravno popunjenim `data.alert.signature_id` poljem.
-3. **Wazuh Dashboard, Threat Hunting modul** — filter `rule.groups:suricata`
-   prikazuje sve alarme; panel **Top 10 MITRE ATT&CKS** prikazuje raspodelu
-   tehnika (Exploit Public-Facing Application, Command and Scripting
-   Interpreter, SMB/Windows Admin Shares) umesto praznog "No results found".
+1. **`alerts.log` on the manager** — each event mapped to its own rule
+   (`100100`–`100103`), not the generic `86601`.
+2. **Wazuh Indexer directly** (a `curl` to port 9200) — confirmed the alerts (e.g.
+   10 records for `rule.id:100103`) made it across via Filebeat, with
+   `data.alert.signature_id` populated correctly.
+3. **Wazuh Dashboard, Threat Hunting** — the filter `rule.groups:suricata` shows
+   all of them, and the **Top 10 MITRE ATT&CKS** panel finally shows a real
+   technique breakdown instead of "No results found".
 
-   ![Top 10 MITRE ATT&CK tehnika — donut chart](assets/mitre-attck-donut-chart.png)
+   ![Top 10 MITRE ATT&CK techniques — donut chart](assets/mitre-attck-donut-chart.png)
 
-   Raspodela prikazana na grafiku odgovara tehnikama mapiranim u
-   `local_rules.xml`: **Exploit Public-Facing Application** (T1190) i
-   **Command and Scripting Interpreter** (T1059) dominiraju jer se javljaju
-   kod sva četiri custom pravila, dok se **SMB/Windows Admin Shares**
-   (T1021.002) pojavljuje isključivo kod Samba pravila (100101).
+   The split in the chart matches what I mapped in `local_rules.xml`: **Exploit
+   Public-Facing Application** (T1190) and **Command and Scripting Interpreter**
+   (T1059) dominate because all four rules carry them, while **SMB/Windows Admin
+   Shares** (T1021.002) shows up only on the Samba rule (100101).
 
-**Lekcija iz troubleshooting-a:** kad su alarmi bili potvrđeni u
-`alerts.log` i u indexer-u preko direktnog upita, ali se nisu prikazivali u
-dashboard-u, uzrok nije bio u obradi podataka nego u **vremenskom filteru**
-dashboard-a (podrazumevano "This week" nije uvek dovoljno široko za
-alarme generisane tokom testiranja u kratkim intervalima) — vredno je prvo
-proveriti taj filter pre dubljeg troubleshooting-a lanca podataka.
+One troubleshooting note that's easy to waste time on: at one point the alerts
+were confirmed in `alerts.log` and in the indexer by direct query, but weren't
+showing in the dashboard. It wasn't a data problem at all — it was the dashboard's
+time filter. The default "This week" isn't always wide enough for alerts you
+generate in quick bursts during testing. Check that filter first before you go
+spelunking through the data pipeline.
 
-## Sledeći koraci
+## Next steps
 
-- Dodavanje custom decoder-a (ne samo rules) ako se u budućnosti doda
-  Suricata potpis sa strukturom koja zahteva parsiranje van generičkog
-  JSON spljoštavanja.
-- Filtriranje `eve.json` na samo `alert` event tipove radi smanjenja
-  opterećenja i izbegavanja graničnih slučajeva "too many fields" greške.
-- Kreiranje custom dashboard vizualizacije specifično za `exploit_attempt`
-  grupu alarma.
+- Add a real custom decoder (not just rules) if I ever add a Suricata signature
+  whose structure needs parsing beyond the generic JSON flattening.
+- Filter `eve.json` to `alert` events only, to cut the load and sidestep the "too
+  many fields" edge cases.
+- Build a custom dashboard view aimed specifically at the `exploit_attempt` alert
+  group.

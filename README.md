@@ -1,84 +1,85 @@
 # SOC Analyst Home Lab Portfolio
 
-Praktičan rad na eksploataciji, detekciji i analizi bezbednosnih ranjivosti
-u kontrolisanom lab okruženju (Kali Linux + Metasploitable2, VirtualBox).
-Svaki writeup pokriva ceo tok — od enumeracije, preko eksploatacije (ručne
-i/ili preko Metasploit-a), do detekcije sa blue team ugla i predloga za
-remedijaciju, sa MITRE ATT&CK mapiranjem.
+Hands-on work exploiting, detecting, and analyzing security vulnerabilities in a
+controlled lab (Kali Linux + Metasploitable2 on VirtualBox). Each writeup covers
+the whole thing end to end: enumeration, exploitation (by hand and/or with
+Metasploit), detection from the blue-team side, and remediation, with MITRE
+ATT&CK mapping throughout.
 
-## Kako ovo funkcioniše zajedno
+## How it all fits together
 
-Ovaj portfolio nije skup odvojenih vežbi — svaki deo se nadovezuje na prethodni
-i zajedno čine kompletan security operations ciklus:
+This isn't a pile of separate exercises. Each piece builds on the last, and
+together they walk through a full security operations cycle.
 
-Prvo sam sagradio **monitoring infrastrukturu**: kompletan Wazuh SIEM stack
-instaliran ručno (paket po paket, bez automated skripte), što je otkrilo sve
-zavisnosti koje automated instalacija sakriva — TLS sertifikati, Filebeat kao
-poseban log shipper, tačna imena konfiguracionih fajlova po komponenti. Realni
-troubleshooting kroz DNS hijacking, disk probleme i systemd timeout-ove dokumentovan
-je kao deo procesa, ne sakriven.
+I started by building the **monitoring infrastructure**: a complete Wazuh SIEM
+stack, installed by hand, package by package, instead of the automated script.
+Doing it that way surfaced every dependency the automated install hides — TLS
+certificates, Filebeat as its own log shipper, the exact config file names each
+component expects. The real troubleshooting that came with it (DNS hijacking,
+disk issues, systemd timeouts) is written up as part of the process, not swept
+under the rug.
 
-Zatim sam pisao **custom Suricata IDS pravila** za svaki exploit i integrisao ih sa
-Wazuh-om kroz custom decoder/rules pristup (ne gotov modul), sa eksplicitnim MITRE
-ATT&CK mapiranjem vidljivim u Threat Hunting dashboard-u. Svako pravilo testirano je
-kroz stvaran exploit saobraćaj sa Kali VM-a ka Metasploitable2 meti.
+Next I wrote **custom Suricata IDS rules** for each exploit and integrated them
+with Wazuh through a custom decoder/rules approach (not a ready-made module), with
+MITRE ATT&CK mapping showing up in the Threat Hunting dashboard. Every rule was
+tested against real exploit traffic from the Kali VM to the Metasploitable2
+target.
 
-Na kraju sam zatvorio petlju sa **Active Response**: kada Suricata uhvati exploit
-pokušaj i Wazuh generiše alarm, sistem automatski blokira napadačev IP na nivou
-firewall-a i automatski ga deblokira nakon definisanog timeout-a.
+Then I closed the loop with **Active Response**: when Suricata catches an exploit
+attempt and Wazuh raises the alert, the system blocks the attacker's IP at the
+firewall automatically, and unblocks it after a set timeout.
 
-Rezultat: napad koji pokrenem sa Kali-ja → Suricata ga hvata na mreži → Wazuh
-generiše alarm sa MITRE tagom → sistem automatski reaguje. Celi lanac, s kraja
-na kraj.
+So the full chain runs end to end: I launch an attack from Kali, Suricata catches
+it on the network, Wazuh raises an alert with a MITRE tag, and the system responds
+on its own.
 
-## Topologija
+## Topology
 
 ![Network topology](assets/network_topology.svg)
 
 ## Infrastructure & SIEM Setup
 
-Manuelna instalacija Wazuh SIEM stack-a (indexer, manager, dashboard) na
-Ubuntu Server, uključujući TLS sertifikate, Filebeat integraciju i
-troubleshooting realnih problema (DNS, disk, servisi):
+Manual install of the Wazuh SIEM stack (indexer, manager, dashboard) on Ubuntu
+Server, including TLS certificates, Filebeat integration, and troubleshooting of
+real problems (DNS, disk, services):
 [infrastructure/wazuh-siem-setup/README.md](infrastructure/wazuh-siem-setup/README.md)
 
-Suricata IDS integrisan sa Wazuh-om preko custom decoder/rules pristupa,
-sa MITRE ATT&CK mapiranjem vidljivim u Threat Hunting dashboard-u:
+Suricata IDS integrated with Wazuh via a custom decoder/rules approach, with MITRE
+ATT&CK mapping visible in the Threat Hunting dashboard:
 [infrastructure/wazuh-siem-setup/suricata-decoder-integration.md](infrastructure/wazuh-siem-setup/suricata-decoder-integration.md)
 
-Wazuh Active Response — automatska iptables blokada napadačevog IP-a
-kada custom Suricata pravilo okine alarm, sa auto-unblock nakon timeout-a:
+Wazuh Active Response — automatic iptables block of the attacker's IP when a
+custom Suricata rule fires, with auto-unblock after a timeout:
 [infrastructure/wazuh-siem-setup/active-response.md](infrastructure/wazuh-siem-setup/active-response.md)
 
-## Writeup-ovi
+## Writeups
 
-| # | Naziv | CVE | Metod | MITRE ATT&CK |
+| # | Name | CVE | Method | MITRE ATT&CK |
 |---|-------|-----|-------|---------------|
 | 00 | [Recon](writeups/00-recon) | — | Nmap full scan | T1046, T1590 |
-| 01 | [vsftpd 2.3.4 Backdoor](writeups/01-vsftpd-backdoor) | CVE-2011-2523 | Ručno + Metasploit | T1190, T1059 |
-| 02 | [Samba usermap_script RCE](writeups/02-samba-usermap) | CVE-2007-2447 | Ručno + Metasploit | T1190, T1059, T1021.002 |
-| 03 | [UnrealIRCd Backdoor](writeups/03-unrealircd-backdoor) | CVE-2010-2075 | Ručno + Metasploit | T1190, T1059 |
+| 01 | [vsftpd 2.3.4 Backdoor](writeups/01-vsftpd-backdoor) | CVE-2011-2523 | Manual + Metasploit | T1190, T1059 |
+| 02 | [Samba usermap_script RCE](writeups/02-samba-usermap) | CVE-2007-2447 | Manual + Metasploit | T1190, T1059, T1021.002 |
+| 03 | [UnrealIRCd Backdoor](writeups/03-unrealircd-backdoor) | CVE-2010-2075 | Manual + Metasploit | T1190, T1059 |
 | 04 | [distcc RCE](writeups/04-distccd-rce) | CVE-2004-2687 | Metasploit | T1190, T1059 |
 
 ## Detection Engineering
 
-Suricata IDS pravila testirana protiv svakog exploita iz tabele iznad,
-uključujući dijagnostikovanje i rešavanje false positive problema.
-Detalji: [detection-engineering/](detection-engineering)
+Suricata IDS rules tested against each exploit in the table above, including
+tracking down and fixing a false positive:
+[detection-engineering/](detection-engineering)
 
-## Alati korišćeni u lab-u
+## Tools used in the lab
 - Kali Linux (attacker)
 - Metasploitable2 (target)
 - Nmap, Metasploit Framework, smbclient, netcat
-- Suricata IDS (custom pravila, MITRE ATT&CK mapiranje)
+- Suricata IDS (custom rules, MITRE ATT&CK mapping)
 - Wazuh SIEM (indexer, manager, dashboard, Filebeat)
-- VirtualBox (host-only mreža `192.168.56.0/24`)
+- VirtualBox (host-only network `192.168.56.0/24`)
 
-## O meni
+## About me
 
-Prelazim iz data engineering-a u cybersecurity, sa fokusom na SOC Analyst
-(L1/L2) pozicije. Background u fizičkoj hemiji i spektroskopiji (Univerzitet
-u Beogradu), trenutno radim kao Data Integration Engineer u ZF Group. Ovaj
-lab dokumentuje moj praktičan rad na razumevanju napada iz oba ugla —
-ofanzivnog i defanzivnog — kao pripremu za SOC ulogu. Posedujem CompTIA
-Security+ sertifikat.
+I'm moving from data engineering into cybersecurity, aiming at SOC Analyst (L1/L2)
+roles. My background is in physical chemistry and spectroscopy (University of
+Belgrade), and I currently work as a Data Integration Engineer at ZF Group. This
+lab is where I work through attacks from both sides, offensive and defensive, to
+prepare for a SOC role. I hold CompTIA Security+.

