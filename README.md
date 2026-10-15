@@ -73,6 +73,7 @@ at a time.
 |---|----------|----------------|-------|
 | 01 | [SSH Brute Force](01-ssh-brute-force) | Event pipeline, correlation rules, and a finding on how attack parallelism evades threshold detection | T1110 |
 | 02 | [Vulnerability Management](02-vulnerability-mgmt) | Vulnerability Detection module, CVSS triage, risk-based remediation, and state-based verification | — |
+| 03 | [Windows Logon Monitoring](03-windows-monitoring) | Windows 4625 telemetry, failed-logon correlation (60122 → 60204), and an enabled-Guest misconfiguration surfaced by the attack | T1110, T1078.001 |
 
 ## Exploitation Writeups
 
