@@ -1,58 +1,84 @@
 # SOC Analyst Home Lab Portfolio
 
-Hands-on work exploiting, detecting, and analyzing security vulnerabilities in a
-controlled lab (Kali Linux + Metasploitable2 on VirtualBox). Each writeup covers
-the whole thing end to end: enumeration, exploitation (by hand and/or with
-Metasploit), detection from the blue-team side, and remediation, with MITRE
-ATT&CK mapping throughout.
+A hands-on project built around one goal: learn Wazuh properly. Not by running the
+one-line installer and clicking through the dashboard, but by building the whole
+SIEM by hand, step by step, and then actually working through it — its pipeline,
+its modules, and real detection scenarios on live hosts. To understand what I'm
+detecting, I also attack: I run real exploits against a vulnerable target and build
+the detection for each one myself.
 
-## How it all fits together
+## The approach
 
-This isn't a pile of separate exercises. Each piece builds on the last, and
-together they walk through a full security operations cycle.
+The thread running through everything here is learning Wazuh deeply, from the
+ground up.
 
-I started by building the **monitoring infrastructure**: a complete Wazuh SIEM
-stack, installed by hand, package by package, instead of the automated script.
-Doing it that way surfaced every dependency the automated install hides — TLS
-certificates, Filebeat as its own log shipper, the exact config file names each
-component expects. The real troubleshooting that came with it (DNS hijacking,
-disk issues, systemd timeouts) is written up as part of the process, not swept
-under the rug.
+**Build it by hand.** I installed the full Wazuh stack (indexer, manager,
+dashboard) package by package instead of using the automated script. Doing it the
+hard way is the point — it surfaces every dependency the installer hides (TLS
+certificates, Filebeat as its own log shipper, the exact config names each
+component wants) and forces real troubleshooting when things break (DNS hijacking,
+disk filling up, systemd timeouts). All of that is written up as it happened, not
+cleaned up after the fact.
 
-Next I wrote **custom Suricata IDS rules** for each exploit and integrated them
-with Wazuh through a custom decoder/rules approach (not a ready-made module), with
-MITRE ATT&CK mapping showing up in the Threat Hunting dashboard. Every rule was
-tested against real exploit traffic from the Kali VM to the Metasploitable2
-target.
+**Work through it on a live endpoint.** With the SIEM running, I went module by
+module on a monitored host: the event pipeline (decoder → rule → correlation), the
+Vulnerability Detection module, alert triage. Each one became a scenario where I
+generate the activity, watch how Wazuh handles it, and triage the result the way
+an L1 analyst would — including the cases where Wazuh's default behaviour has
+limits worth knowing about.
 
-Then I closed the loop with **Active Response**: when Suricata catches an exploit
-attempt and Wazuh raises the alert, the system blocks the attacker's IP at the
-firewall automatically, and unblocks it after a set timeout.
+**Attack, so I understand the detection.** In a separate attack range I exploit a
+deliberately vulnerable target (Metasploitable2), then build network detection for
+each exploit: custom Suricata rules, wired into Wazuh through a custom
+decoder/rules approach with MITRE ATT&CK mapping, and finally Active Response that
+blocks the attacker automatically. Running the attack myself is what makes the
+detection meaningful — I know exactly what it's supposed to catch and why.
 
-So the full chain runs end to end: I launch an attack from Kali, Suricata catches
-it on the network, Wazuh raises an alert with a MITRE tag, and the system responds
-on its own.
+> **Two environments.** The Wazuh learning and endpoint scenarios run against a
+> live monitored host on one network. The exploit work and its network detection
+> run in a separate attack range (Kali + Metasploitable2) with its own hand-built
+> Wazuh stack. Both exist for the same reason: to learn Wazuh from more than one
+> angle.
 
 ## Topology
+
+The attack range (Kali → Metasploitable2) with the Suricata sensor watching
+passively:
 
 ![Network topology](assets/network_topology.svg)
 
 ## Infrastructure & SIEM Setup
 
+Building and understanding the stack itself.
+
 Manual install of the Wazuh SIEM stack (indexer, manager, dashboard) on Ubuntu
-Server, including TLS certificates, Filebeat integration, and troubleshooting of
-real problems (DNS, disk, services):
+Server — TLS certificates, Filebeat integration, and the real troubleshooting that
+came with doing it by hand:
 [infrastructure/wazuh-siem-setup/README.md](infrastructure/wazuh-siem-setup/README.md)
 
 Suricata IDS integrated with Wazuh via a custom decoder/rules approach, with MITRE
-ATT&CK mapping visible in the Threat Hunting dashboard:
+ATT&CK mapping showing up in the Threat Hunting dashboard:
 [infrastructure/wazuh-siem-setup/suricata-decoder-integration.md](infrastructure/wazuh-siem-setup/suricata-decoder-integration.md)
 
 Wazuh Active Response — automatic iptables block of the attacker's IP when a
 custom Suricata rule fires, with auto-unblock after a timeout:
 [infrastructure/wazuh-siem-setup/active-response.md](infrastructure/wazuh-siem-setup/active-response.md)
 
-## Writeups
+## Wazuh Detection Scenarios
+
+Working through Wazuh on a live monitored endpoint — the blue-team side, one module
+at a time.
+
+| # | Scenario | What it covers | MITRE |
+|---|----------|----------------|-------|
+| 01 | [SSH Brute Force](01-ssh-brute-force) | Event pipeline, correlation rules, and a finding on how attack parallelism evades threshold detection | T1110 |
+| 02 | [Vulnerability Management](02-vulnerability-mgmt) | Vulnerability Detection module, CVSS triage, risk-based remediation, and state-based verification | — |
+
+## Exploitation Writeups
+
+The attack range. Each writeup runs the full flow end to end — enumeration,
+exploitation (by hand and/or with Metasploit), detection from the blue-team side,
+and remediation — with MITRE ATT&CK mapping throughout.
 
 | # | Name | CVE | Method | MITRE ATT&CK |
 |---|-------|-----|-------|---------------|
@@ -64,22 +90,21 @@ custom Suricata rule fires, with auto-unblock after a timeout:
 
 ## Detection Engineering
 
-Suricata IDS rules tested against each exploit in the table above, including
-tracking down and fixing a false positive:
+The Suricata rules behind the exploits above — one per attack, each tested against
+the real thing, including tracking down and fixing a false positive:
 [detection-engineering/](detection-engineering)
 
 ## Tools used in the lab
-- Kali Linux (attacker)
-- Metasploitable2 (target)
-- Nmap, Metasploit Framework, smbclient, netcat
+- Wazuh SIEM (indexer, manager, dashboard, Filebeat) — built and run by hand
 - Suricata IDS (custom rules, MITRE ATT&CK mapping)
-- Wazuh SIEM (indexer, manager, dashboard, Filebeat)
-- VirtualBox (host-only network `192.168.56.0/24`)
+- Kali Linux (attacker), Metasploitable2 (target)
+- Nmap, Metasploit Framework, Hydra, smbclient, netcat
+- VirtualBox (host-only networking)
 
 ## About me
 
 I'm moving from data engineering into cybersecurity, aiming at SOC Analyst (L1/L2)
 roles. My background is in physical chemistry and spectroscopy (University of
 Belgrade), and I currently work as a Data Integration Engineer at ZF Group. This
-lab is where I work through attacks from both sides, offensive and defensive, to
-prepare for a SOC role. I hold CompTIA Security+.
+lab is where I learn the defensive tooling properly and work through attacks from
+both sides to prepare for a SOC role. I hold CompTIA Security+.
